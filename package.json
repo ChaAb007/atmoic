@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Surface Atomic 0.1 memory host",
+  "description": "Atomic memory: experience, relevance, importance, levels and learning for small businesses",
   "scripts": {
-    "test": "node --experimental-strip-types --test test/mass.test.ts test/store.test.ts",
+    "test": "node --experimental-strip-types --test test/*.test.ts test/atomic/*.test.ts",
     "start": "node --experimental-strip-types src/host.ts"
   },
   "devDependencies": {
