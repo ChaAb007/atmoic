@@ -4,6 +4,7 @@ import type { Classifier, Clock, Embedder } from '../../src/atomic/ports.ts';
 import type {
   Angles,
   ClassifierResult,
+  Directory,
   Facts,
   Fundamental,
   KindGuess,
@@ -14,10 +15,10 @@ import type { AtomicConfig } from '../../src/atomic/config.ts';
 /** Deterministic stand-in for a multilingual embedding model: one dimension per business topic. */
 const TOPICS: Record<string, string[]> = {
   payment: ['payment', 'paisa', 'dues', 'baaki', 'neft', 'lakh', 'cheque', 'paid', 'pay'],
-  order: ['order', 'ton', 'maal', 'piece', 'chahiye', 'bhejo', 'bhej', 'usual'],
+  order: ['order', 'ton', 'maal', 'piece', 'chahiye', 'bhejo', 'bhej', 'usual', 'so', 'so-'],
   rate: ['rate', '₹', 'price', 'bhav'],
   product: ['nail', 'nails', 'pin', 'pins', 'panel', 'wire', 'u-pin'],
-  dispatch: ['dispatch', 'gaadi', 'vehicle', 'truck', 'delivery', 'e-way', 'eway', 'friday'],
+  dispatch: ['dispatch', 'gaadi', 'vehicle', 'truck', 'delivery', 'e-way', 'eway', 'friday', 'sent', 'email'],
   quality: ['rust', 'quality', 'complaint', 'kharab', 'kam'],
   staff: ['advance', 'salary', 'overtime', 'shift'],
   machine: ['machine', 'die', 'header', 'breakdown'],
@@ -73,12 +74,26 @@ export class KeywordClassifier implements Classifier {
     this.scripted.set(text, result);
   }
 
-  async classify(input: { text: string }): Promise<ClassifierResult> {
+  async classify(input: { text: string; replyTo?: string }): Promise<ClassifierResult> {
     const scripted = this.scripted.get(input.text);
     if (scripted) return structuredClone(scripted);
     const text = input.text;
     const lower = text.toLowerCase();
     const has = (words: string[]) => words.some((word) => lower.includes(word));
+    if (input.replyTo && /^(ok|okay|haan|ji|theek|sure|yes|done)\b/.test(lower)) {
+      const asked = /please|bana dena|kar dena|make a|chahiye|bhej do|kar do/.test(input.replyTo.toLowerCase());
+      return {
+        angles: {
+          type: 'order', intent: asked ? 'commit' : 'confirm', stance: 'agree', emotion: 'neutral', certainty: 'firm',
+          specifics: {}, change: 'new', risk: asked ? 'high' : 'low', trust: false,
+        },
+        kinds: [{ kind: 'agent_task', confidence: 0.6 }, { kind: 'order', confidence: 0.6 }],
+      };
+    }
+    const action = /\bcreated\b|banaya/.test(lower) && /\bso-\d+|order/.test(lower) ? 'order_created'
+      : /\bsent\b|bhej diya/.test(lower) && /\bso-\d+|order/.test(lower) ? 'order_sent'
+      : /invoice|bill/.test(lower) && /created|banaya|generated/.test(lower) ? 'invoice_created'
+      : undefined;
     const facts = extractFacts(text);
     const paymentWords = has(['payment', 'dues', 'baaki', 'neft', 'lakh', 'cheque']);
     const orderWords = has(['order', 'ton', 'chahiye', 'bhejo', 'bhej do', 'usual', 'kg']);
@@ -90,6 +105,7 @@ export class KeywordClassifier implements Classifier {
       type: joke ? 'joke' : question ? 'question' : paymentWords ? 'payment' : rateWords ? 'rate'
         : has(['rust', 'kam aaya', 'complaint']) ? 'complaint' : orderWords ? 'order' : 'opinion',
       intent: has(['kar dunga', 'kar denge', 'pakka', 'final', 'confirm']) ? 'commit'
+        : has(['please', 'bana dena', 'kar dena', 'make a']) ? 'assign'
         : has(['chahiye', 'bhejo', 'bhej do', 'kar do']) ? 'request' : 'none',
       stance: has(['nahi', 'no,', 'galat']) ? 'disagree' : has(['haan', 'yes', 'theek']) ? 'agree' : 'neutral',
       emotion: has(['😄', 'haha', 'accha']) ? 'happy' : has(['🙄', 'gussa']) ? 'angry' : has(['jaldi', 'urgent']) ? 'urgent' : 'neutral',
@@ -109,8 +125,9 @@ export class KeywordClassifier implements Classifier {
     if (has(['gaadi', 'vehicle', 'dispatch', 'friday'])) add('dispatch', 0.7);
     if (has(['machine', 'die', 'header'])) add('production', 0.8);
     if (has(['rust', 'kam aaya', 'complaint'])) add('complaint', 0.8);
+    if (has(['so ', 'so-', 'sales order'])) add('agent_task', 0.6);
     if (!kinds.length) add('general_chat', 0.6);
-    return { angles, kinds };
+    return { angles, kinds, action };
   }
 }
 
@@ -133,7 +150,9 @@ export const ABC_FUNDAMENTAL: Fundamental = {
   version: 1,
 };
 
-export function makeEngine(options: { clock?: TestClock; config?: Partial<AtomicConfig>; fundamental?: Fundamental } = {}) {
+export function makeEngine(options: {
+  clock?: TestClock; config?: Partial<AtomicConfig>; fundamental?: Fundamental; directory?: Directory;
+} = {}) {
   const storage = new InMemoryStorage();
   const classifier = new KeywordClassifier();
   const clock = options.clock ?? new TestClock('2026-10-01T09:00:00.000Z');
@@ -144,6 +163,7 @@ export function makeEngine(options: { clock?: TestClock; config?: Partial<Atomic
     fundamental: options.fundamental ?? ABC_FUNDAMENTAL,
     config: options.config,
     clock,
+    directory: options.directory,
   });
   return { engine, storage, classifier, clock };
 }

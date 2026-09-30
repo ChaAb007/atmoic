@@ -21,9 +21,16 @@ export interface MemoryFilter {
   levels?: Level[];
   status?: MemoryStatus;
   partyId?: string;
+  partyIds?: string[];
   dealId?: string;
   experienceIds?: string[];
   dueBefore?: string;
+  /** Experience time window, ISO instants inclusive. */
+  occurredFrom?: string;
+  occurredTo?: string;
+  /** Memories from experiences this person took part in. */
+  participant?: string;
+  action?: string;
 }
 
 export interface ExperienceFilter {
@@ -82,7 +89,16 @@ export interface Embedder {
 }
 
 export interface Classifier {
-  classify(input: { text: string; nearby: string[]; context: InputContext; recalled: Memory[] }): Promise<ClassifierResult>;
+  classify(input: {
+    text: string;
+    nearby: string[];
+    context: InputContext;
+    recalled: Memory[];
+    /** When the words were said; relative dates resolve against this. */
+    occurredAt: string;
+    /** For a short reply, the line it answers. */
+    replyTo?: string;
+  }): Promise<ClassifierResult>;
 }
 
 export interface SplitStatement {

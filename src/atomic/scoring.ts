@@ -25,7 +25,9 @@ import type {
 const FACT_FIELDS: (keyof Facts)[] = ['qty', 'rate', 'amount', 'date', 'item', 'place'];
 
 export function specificsCount(facts: Facts): number {
-  return FACT_FIELDS.filter((field) => facts[field] !== undefined && facts[field] !== '').length;
+  const hasDate = facts.date !== undefined || facts.dateFrom !== undefined || facts.dateTo !== undefined;
+  return FACT_FIELDS.filter((field) => field !== 'date' && facts[field] !== undefined && facts[field] !== '').length
+    + (hasDate ? 1 : 0);
 }
 
 export function angleScore(angles: Angles, angle: AngleName): number {
@@ -92,7 +94,7 @@ export function chooseKind(angles: Angles, kinds: KindGuess[], weights: WeightsT
 export function isOverride(angles: Angles, kind: StatementKind, fundamental: Fundamental): boolean {
   if (angles.intent !== 'commit') return false;
   const facts = angles.specifics;
-  if (facts.date !== undefined) return true;
+  if (facts.date !== undefined || facts.dateTo !== undefined) return true;
   if (facts.amount !== undefined || facts.qty !== undefined) return true;
   return fundamental.criticalKinds.includes(kind);
 }
