@@ -1,0 +1,14 @@
+{
+  "name": "surface-atomic",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Surface Atomic 0.1 memory host",
+  "scripts": {
+    "test": "node --experimental-strip-types --test test/mass.test.ts test/store.test.ts",
+    "start": "node --experimental-strip-types src/host.ts"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.10"
+  }
+}
