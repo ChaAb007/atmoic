@@ -204,8 +204,8 @@ test('due check: paid in full before the date is fulfilled; late, partial or mis
   await pay('late', '09', 2);
   await pay('partial', '04', 1);
 
-  clock.set('2026-10-05T20:00:00.000Z');
-  assert.deepEqual(await engine.dueCheck(), { fulfilled: [], broken: [] }, 'not due until the day is over');
+  clock.set('2026-10-05T17:00:00.000Z');
+  assert.deepEqual(await engine.dueCheck(), { fulfilled: [], broken: [] }, 'not due until the day is over (22:30 in India)');
 
   clock.set('2026-10-06T09:00:00.000Z');
   const result = await engine.dueCheck();

@@ -27,14 +27,15 @@ export const extractiveSummarizer: Summarizer = {
 };
 
 /**
- * First business event for the same party (and deal, when the memory has one) after the promise was made.
- * When both sides carry an amount, the event must cover the promised amount.
+ * First business event (or, for non-payment commitments, agent task) for the same party, and deal when the memory
+ * has one, after the promise was made. When both sides carry an amount, the event must cover the promised amount.
  */
 export const defaultOutcomeMatcher: OutcomeMatcher = {
   match(memory: Memory, events: Experience[]): Experience | undefined {
     const created = Date.parse(memory.createdAt);
     return events
-      .filter((event) => event.event && Date.parse(event.occurredAt) >= created)
+      .filter((event) => Date.parse(event.occurredAt) >= created)
+      .filter((event) => event.event || (memory.kind !== 'payment' && event.context.kind === 'agent_task'))
       .filter((event) => event.context.partyId === memory.partyId)
       .filter((event) => !memory.dealId || event.context.dealId === memory.dealId)
       .filter((event) => {

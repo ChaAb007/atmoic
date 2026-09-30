@@ -1,4 +1,4 @@
-export type ContextKind = 'user_user' | 'user_agent' | 'agent_task' | 'event';
+export type ContextKind = 'user_user' | 'user_agent' | 'agent_agent' | 'agent_task' | 'event';
 
 export type StatementKind =
   | 'order'
@@ -35,7 +35,15 @@ export interface Facts {
   unit?: string;
   rate?: number;
   amount?: number;
+  /** Local business date (YYYY-MM-DD), resolved once against when the words were said. */
   date?: string;
+  /** Date range, e.g. "Diwali ke baad" -> dateFrom only. */
+  dateFrom?: string;
+  dateTo?: string;
+  /** The original time words ("kal", "last Wednesday"). */
+  datePhrase?: string;
+  /** Time words that name no date ("jaldi"); the agent should ask. */
+  dateUnresolved?: boolean;
   item?: string;
   place?: string;
 }
@@ -63,6 +71,8 @@ export interface ClassifierResult {
   /** Optional per-statement party / deal when one chat touches several deals. */
   partyId?: string;
   dealId?: string;
+  /** A completed action this statement reports, e.g. order_created, order_sent, invoice_created. */
+  action?: string;
 }
 
 export interface ExperienceContext {
@@ -118,6 +128,14 @@ export interface Memory {
   /** Angles that scored above zero; used when a user says a memory was missed or was noise. */
   firedAngles?: AngleName[];
   speaker?: string;
+  /** Everyone in the experience; used for "did Amit do it" and for access. */
+  participants: string[];
+  /** Completed action reported by this statement, or the business event type. */
+  action?: string;
+  /** For short replies ("OK sir"): the line being answered. */
+  replyTo?: string;
+  /** When the experience happened. */
+  occurredAt: string;
   partyId?: string;
   dealId?: string;
   dueAt?: string;
@@ -135,6 +153,7 @@ export interface Summary {
   experienceId: string;
   text: string;
   vector: number[];
+  participants: string[];
   partyId?: string;
   dealId?: string;
   occurredAt: string;
@@ -221,4 +240,31 @@ export interface Task {
   partyId?: string;
   memoryId?: string;
   linkId?: string;
+}
+
+/** Who is asking. The owner sees everything; staff and agents see their own work and their parties; externals see only conversations they were in. */
+export interface Viewer {
+  id: string;
+  role: 'owner' | 'staff' | 'agent' | 'external';
+  parties?: string[];
+}
+
+/** Names the host knows, so a question like "Sharma ji ka order" can be tied to a party and a person. */
+export interface Directory {
+  parties?: { id: string; names: string[] }[];
+  people?: { id: string; names: string[] }[];
+  actions?: { id: string; words: string[] }[];
+}
+
+export interface RecallOptions {
+  viewer?: Viewer;
+  /** Only memories from experiences this person took part in. */
+  actor?: string;
+  /** Only memories reporting this completed action. */
+  action?: string;
+  /** Local date range (YYYY-MM-DD). */
+  from?: string;
+  to?: string;
+  /** Read party, person, action and dates from the question text (default true). */
+  fromQuestion?: boolean;
 }

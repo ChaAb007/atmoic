@@ -1,3 +1,5 @@
+import { DEFAULT_DATE_OPTIONS } from './dates.ts';
+import type { DateOptions } from './dates.ts';
 import type {
   AngleName,
   CertaintyValue,
@@ -80,6 +82,10 @@ export interface AtomicConfig {
   weightStep: number;
   /** Intents whose certainty is scaled by the speaker's track record. */
   trackedIntents: IntentValue[];
+  /** A reply this short ("OK sir") is judged together with the line it answers. */
+  replyWords: number;
+  /** Local time zone and festival calendar for date words. */
+  dates: DateOptions;
 }
 
 export const DEFAULT_CONFIG: AtomicConfig = {
@@ -100,6 +106,8 @@ export const DEFAULT_CONFIG: AtomicConfig = {
   startStrength: { memory: 0.5, similar: 0.3, same_deal: 0.5, replaces: 1, promise_outcome: 1 },
   weightStep: 0.25,
   trackedIntents: ['commit'],
+  replyWords: 4,
+  dates: DEFAULT_DATE_OPTIONS,
 };
 
 export function cloneWeights(weights: WeightsTable): WeightsTable {

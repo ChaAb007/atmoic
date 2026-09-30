@@ -84,12 +84,18 @@ export class InMemoryStorage implements StorageAdapter {
   async findMemories(filter: MemoryFilter): Promise<Memory[]> {
     const levels = filter.levels ?? (filter.level ? [filter.level] : undefined);
     const ids = filter.experienceIds && new Set(filter.experienceIds);
+    const parties = filter.partyIds && new Set(filter.partyIds);
     return [...this.memories.values()]
       .filter((memory) =>
         (!levels || levels.includes(memory.level))
         && (filter.status === undefined || memory.status === filter.status)
         && (filter.partyId === undefined || memory.partyId === filter.partyId)
+        && (!parties || (memory.partyId !== undefined && parties.has(memory.partyId)))
         && (filter.dealId === undefined || memory.dealId === filter.dealId)
+        && (filter.occurredFrom === undefined || memory.occurredAt >= filter.occurredFrom)
+        && (filter.occurredTo === undefined || memory.occurredAt <= filter.occurredTo)
+        && (filter.participant === undefined || memory.participants.includes(filter.participant))
+        && (filter.action === undefined || memory.action === filter.action)
         && (!ids || ids.has(memory.experienceId))
         && (filter.dueBefore === undefined || (memory.dueAt !== undefined && memory.dueAt < filter.dueBefore)))
       .map(copy);

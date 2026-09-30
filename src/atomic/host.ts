@@ -3,12 +3,13 @@ import { AtomicEngine } from './engine.ts';
 import type { Clock, Models, StorageAdapter } from './ports.ts';
 import { cycleIndex, DEFAULT_SYNC, isWindowOpen } from './sync.ts';
 import type { SyncWindowConfig } from './sync.ts';
-import type { Fundamental } from './types.ts';
+import type { Directory, Fundamental } from './types.ts';
 
 export interface HostOptions {
   /** Supplied by the application Atomic is installed in: one database per client. */
   storageFor(tenantId: string): StorageAdapter | Promise<StorageAdapter>;
   fundamentalFor(tenantId: string): Fundamental | Promise<Fundamental>;
+  directoryFor?(tenantId: string): Directory | Promise<Directory>;
   models: Models;
   config?: Partial<AtomicConfig>;
   sync?: Partial<SyncWindowConfig>;
@@ -41,6 +42,7 @@ export class AtomicHost {
         tenantId,
         storage: await this.options.storageFor(tenantId),
         fundamental: await this.options.fundamentalFor(tenantId),
+        directory: await this.options.directoryFor?.(tenantId),
         models: this.options.models,
         config: this.options.config,
         clock: this.clock,

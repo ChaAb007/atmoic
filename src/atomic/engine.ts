@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { ANGLES, DEFAULT_CONFIG, DEFAULT_WEIGHTS } from './config.ts';
 import type { AtomicConfig } from './config.ts';
 import { defaultOutcomeMatcher, extractiveSummarizer, lineSplitter } from './defaults.ts';
+import { localDayRange, resolveDate } from './dates.ts';
 import { applyLearning, effectiveStrength } from './learning.ts';
 import type { SyncResult } from './learning.ts';
 import type { Clock, Models, StorageAdapter } from './ports.ts';
@@ -20,6 +21,7 @@ import type {
   ChangeValue,
   Experience,
   Facts,
+  Directory,
   Fundamental,
   Input,
   InputContext,
@@ -29,13 +31,23 @@ import type {
   LinkKind,
   Memory,
   Mode,
+  RecallOptions,
   Task,
+  Viewer,
 } from './types.ts';
 import { cosine } from './vector.ts';
 
 const DAY_MS = 86_400_000;
 const COMPARED_FACTS: (keyof Facts)[] = ['qty', 'rate', 'amount', 'date'];
 const CREDIT_ACTIONS = ['credit_terms', 'dispatch_on_credit', 'accept_order_on_credit'];
+
+function wordCount(text: string): number {
+  return text.split(/\s+/).filter(Boolean).length;
+}
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 function freezeFundamental(fundamental: Fundamental): Fundamental {
   return Object.freeze({
@@ -52,11 +64,33 @@ export interface RecalledExperience {
   score: number;
 }
 
+export interface RecallScope {
+  partyIds?: string[];
+  actor?: string;
+  action?: string;
+  /** Local dates, YYYY-MM-DD. */
+  from?: string;
+  to?: string;
+}
+
+export interface Ambiguity {
+  kind: 'party' | 'person';
+  ids: string[];
+}
+
 export interface RecallResult {
   experiences: RecalledExperience[];
   memories: Memory[];
   /** Highest level recall had to climb to. */
   climbedTo: Level;
+  /** False means an explicit "nothing found" for this scope. */
+  found: boolean;
+  /** The limits recall applied, including those read from the question. */
+  scope: RecallScope;
+  /** When nothing matched the dates: the latest matching experience outside them. */
+  nearest?: Memory[];
+  /** A name matched more than one party or person: ask which one. */
+  ambiguous?: Ambiguity[];
 }
 
 export interface StatementTrace {
@@ -72,6 +106,9 @@ export interface StatementTrace {
   change?: ChangeValue;
   memoryId: string;
   replaced?: string[];
+  action?: string;
+  replyTo?: string;
+  facts?: Facts;
 }
 
 export interface ProcessResult {
@@ -98,6 +135,8 @@ export interface EngineOptions {
   fundamental: Fundamental;
   config?: Partial<AtomicConfig>;
   clock?: Clock;
+  /** Names of parties, people and actions, so questions can be scoped. */
+  directory?: Directory;
 }
 
 /** One client's memory. Every client gets its own engine and its own storage. */
@@ -108,6 +147,7 @@ export class AtomicEngine {
   private readonly models: Required<Models>;
   private readonly clock: Clock;
   private fundamentalValue: Fundamental;
+  private directory: Directory;
   private queue: Promise<void> = Promise.resolve();
   private readonly processed: ProcessResult[] = [];
   readonly errors: Error[] = [];
@@ -124,6 +164,11 @@ export class AtomicEngine {
       ...options.models,
     } as Required<Models>;
     this.fundamentalValue = freezeFundamental(options.fundamental);
+    this.directory = options.directory ?? {};
+  }
+
+  setDirectory(directory: Directory): void {
+    this.directory = directory;
   }
 
   get fundamental(): Fundamental {
@@ -142,7 +187,7 @@ export class AtomicEngine {
   /** Fast path: recall while the user waits, then queue the layers in the background. */
   async onInput(input: Input): Promise<{ experienceId: string; recall: RecallResult }> {
     const experienceId = input.id ?? randomUUID();
-    const recall = await this.recall(input.context, input.raw);
+    const recall = await this.recall(input.context, input.raw, { fromQuestion: false });
     this.queue = this.queue
       .then(async () => { this.processed.push(await this.process({ ...input, id: experienceId }, recall.memories)); })
       .catch((error: unknown) => { this.errors.push(error instanceof Error ? error : new Error(String(error))); });
@@ -155,14 +200,52 @@ export class AtomicEngine {
     return this.processed.splice(0);
   }
 
-  /** Step A. L4 summaries first, then climb L1 -> L2 -> L3 until an answer-close memory is found. Read-only. */
-  async recall(context: InputContext, text = ''): Promise<RecallResult> {
+  /**
+   * Step A. With scope limits (person, action, dates) recall returns every matching memory, or an explicit
+   * "not found" plus the nearest match outside the dates. Without limits it reads L4 summaries first and climbs
+   * L1 -> L2 -> L3 until an answer-close memory is found. Read-only, and filtered by what the viewer may see.
+   */
+  async recall(context: InputContext, text = '', options: RecallOptions = {}): Promise<RecallResult> {
     const now = this.clock.now();
+    const scope = this.scopeOf(context, text, options, now);
+    if (scope.ambiguous.length) {
+      return { experiences: [], memories: [], climbedTo: 'L1', found: false, scope: scope.limits, ambiguous: scope.ambiguous };
+    }
+    const { partyIds, actor, action, from, to } = scope.limits;
+    const visible = (memory: Memory) => this.visibleTo(options.viewer, memory.participants, memory.partyId);
+
+    if (actor || action || from || to) {
+      const window = from || to
+        ? localDayRange(from ?? '1970-01-01', to ?? '9999-12-31', this.config.dates.utcOffsetMinutes)
+        : undefined;
+      const base = { partyIds, participant: actor, status: 'active' as const, levels: ['L1', 'L2'] as Level[] };
+      const matched = (await this.storage.findMemories({
+        ...base, action, occurredFrom: window?.fromIso, occurredTo: window?.toIso,
+      })).filter(visible);
+      let memories = matched;
+      if (action && matched.length) {
+        const experienceIds = [...new Set(matched.map((memory) => memory.experienceId))];
+        memories = (await this.storage.findMemories({ status: 'active', levels: ['L1', 'L2'], experienceIds })).filter(visible);
+      }
+      memories.sort((left, right) => right.occurredAt.localeCompare(left.occurredAt) || left.level.localeCompare(right.level));
+      const result: RecallResult = {
+        experiences: [], memories: memories.slice(0, this.config.recallBudget), climbedTo: 'L2',
+        found: memories.length > 0, scope: scope.limits,
+      };
+      if (!result.found && window) {
+        const outside = (await this.storage.findMemories({ ...base, action })).filter(visible);
+        outside.sort((left, right) => right.occurredAt.localeCompare(left.occurredAt));
+        const latest = outside[0];
+        if (latest) result.nearest = outside.filter((memory) => memory.experienceId === latest.experienceId);
+      }
+      return result;
+    }
+
     const query = await this.models.embedder.embed(`${context.topic}\n${text}`);
-    const partyIds = context.partyIds ?? (context.partyId ? [context.partyId] : undefined);
     const hits = await this.storage.searchSummaries(query, this.config.recallCandidates, { partyIds });
     const scored: RecalledExperience[] = [];
     for (const hit of hits) {
+      if (!this.visibleTo(options.viewer, hit.summary.participants, hit.summary.partyId)) continue;
       const links = await this.storage.linksTouching(hit.summary.experienceId);
       const strongest = links.length
         ? Math.max(...links.map((link) => effectiveStrength(link.strength, link.lastUsedAt, now, this.config)))
@@ -182,13 +265,65 @@ export class AtomicEngine {
     if (experienceIds.length) {
       for (const level of ['L1', 'L2', 'L3'] as Level[]) {
         climbedTo = level;
-        const found = await this.storage.findMemories({ level, status: 'active', experienceIds });
+        const found = (await this.storage.findMemories({ level, status: 'active', experienceIds })).filter(visible);
         found.sort((left, right) => cosine(right.vector, query) - cosine(left.vector, query));
         memories.push(...found);
         if (memories.some((memory) => cosine(memory.vector, query) >= this.config.answerThreshold)) break;
       }
     }
-    return { experiences: top, memories: memories.slice(0, this.config.recallBudget), climbedTo };
+    const kept = memories.slice(0, this.config.recallBudget);
+    return { experiences: top, memories: kept, climbedTo, found: kept.length > 0, scope: scope.limits };
+  }
+
+  /** Decision #6: the owner sees everything; staff and agents their own work and parties; externals their own chats. */
+  private visibleTo(viewer: Viewer | undefined, participants: string[], partyId?: string): boolean {
+    if (!viewer || viewer.role === 'owner' || viewer.id === this.fundamentalValue.owner) return true;
+    if (participants.includes(viewer.id)) return true;
+    if (viewer.role === 'external') return false;
+    return Boolean(partyId && viewer.parties?.includes(partyId));
+  }
+
+  /** What the question limits: party, person, completed action and dates ("today", "last Wednesday"). */
+  private scopeOf(context: InputContext, text: string, options: RecallOptions, now: Date) {
+    const limits: RecallScope = {
+      partyIds: context.partyIds ?? (context.partyId ? [context.partyId] : undefined),
+      actor: options.actor,
+      action: options.action,
+      from: options.from,
+      to: options.to,
+    };
+    const ambiguous: Ambiguity[] = [];
+    if (options.fromQuestion === false || !text) return { limits, ambiguous };
+    const lower = ` ${text.toLowerCase()} `;
+    /** Length of the longest name mentioned; the most specific mention wins ("Sharma Traders" over "Sharma"). */
+    const longest = (names: string[]) => Math.max(0, ...names
+      .filter((name) => new RegExp(`\\b${escapeRegExp(name.toLowerCase())}\\b`).test(lower))
+      .map((name) => name.length));
+    const pick = (entries: { id: string; names: string[] }[]) => {
+      const scored = entries.map((entry) => ({ id: entry.id, length: longest(entry.names) })).filter((entry) => entry.length > 0);
+      const best = Math.max(0, ...scored.map((entry) => entry.length));
+      return scored.filter((entry) => entry.length === best).map((entry) => entry.id);
+    };
+    const directory = this.directory;
+    if (!limits.partyIds && directory.parties) {
+      const ids = pick(directory.parties);
+      if (ids.length > 1) ambiguous.push({ kind: 'party', ids });
+      else if (ids.length === 1) limits.partyIds = ids;
+    }
+    if (!limits.actor && directory.people) {
+      const ids = pick(directory.people);
+      if (ids.length > 1) ambiguous.push({ kind: 'person', ids });
+      else if (ids.length === 1) limits.actor = ids[0];
+    }
+    if (!limits.action && directory.actions) {
+      limits.action = pick(directory.actions.map((item) => ({ id: item.id, names: item.words })))[0];
+    }
+    if (!limits.from && !limits.to) {
+      const resolved = resolveDate(text, now, this.config.dates);
+      if (resolved?.date) { limits.from = resolved.date; limits.to = resolved.date; }
+      else if (resolved?.from || resolved?.to) { limits.from = resolved.from; limits.to = resolved.to; }
+    }
+    return { limits, ambiguous };
   }
 
   /** Steps 0-3, L4 and B. */
@@ -213,6 +348,9 @@ export class AtomicEngine {
     const weights = (await this.storage.getWeights()) ?? DEFAULT_WEIGHTS;
     const traces: StatementTrace[] = [];
     const kept: { text: string; level: Level }[] = [];
+    /** Tool results and business events are records of work done: always classified, never filtered out. */
+    const isRecord = context.kind === 'agent_task' || context.kind === 'event';
+    let previous: { text: string; speaker?: string; facts: Facts } | undefined;
 
     for (const [position, piece] of pieces.entries()) {
       const speaker = piece.speaker && input.participants.includes(piece.speaker) ? piece.speaker : undefined;
@@ -220,26 +358,41 @@ export class AtomicEngine {
       const vector = await this.models.embedder.embed(text);
       const statementId = randomUUID();
       await this.storage.putStatement({ id: statementId, experienceId: experience.id, speaker, position, text, vector });
-      const relevance = cosine(vector, contextVector);
+
+      // A short reply ("OK sir", "haan") is judged together with the line it answers.
+      const isReply = Boolean(previous && previous.speaker !== speaker && wordCount(text) <= this.config.replyWords);
+      const replyTo = isReply ? previous!.text : undefined;
+      let relevance = cosine(vector, contextVector);
+      if (replyTo) relevance = Math.max(relevance, cosine(await this.models.embedder.embed(`${replyTo}\n${text}`), contextVector));
+
       const base = {
-        id: randomUUID(), statementId, experienceId: experience.id, content: text, vector, speaker,
+        id: randomUUID(), statementId, experienceId: experience.id, content: replyTo ? `${text} (re: ${replyTo})` : text,
+        vector, speaker, participants: experience.participants, occurredAt: experience.occurredAt, replyTo,
         status: 'active' as const, strength: this.config.startStrength.memory, lastUsedAt: now, createdAt: now,
       };
 
-      if (relevance < this.config.relevanceThreshold) {
+      if (!isRecord && relevance < this.config.relevanceThreshold) {
         await this.storage.putMemory({
           ...base, level: 'L3', facts: {}, partyId: context.partyId, dealId: context.dealId, certainty: 1, importance: 0,
         });
         traces.push({ text, speaker, relevance, level: 'L3', memoryId: base.id });
         kept.push({ text, level: 'L3' });
+        previous = { text, speaker, facts: {} };
         continue;
       }
 
-      const result = await this.models.classifier.classify({ text, nearby, context, recalled });
+      const result = await this.models.classifier.classify({
+        text, nearby, context, recalled, occurredAt: experience.occurredAt, replyTo,
+      });
       const partyId = result.partyId ?? context.partyId;
       const dealId = result.dealId ?? context.dealId;
       const angles: Angles = { ...result.angles, specifics: { ...result.angles.specifics } };
-      const match = await this.compareWithMemory(angles.specifics, partyId, dealId);
+      this.resolveDates(angles.specifics, text, experience.occurredAt);
+      if (replyTo && previous) angles.specifics = { ...previous.facts, ...angles.specifics };
+      const action = result.action ?? (context.kind === 'event' ? input.event?.type : undefined);
+
+      const match = action ? { sameIds: [] as string[] } as { change?: ChangeValue; sameIds: string[] }
+        : await this.compareWithMemory(angles.specifics, partyId, dealId);
       if (match.change && angles.change !== 'contradiction') angles.change = match.change;
 
       const choice = chooseKind(angles, result.kinds, weights, this.config);
@@ -250,7 +403,8 @@ export class AtomicEngine {
       }
       const importance = choice.content * certaintyFactor(certainty, this.config);
       const override = isOverride(angles, choice.kind, this.fundamentalValue);
-      const level = levelFor(relevance, importance, override, this.config);
+      // Completed actions and business events are facts of record: always L1.
+      const level: Level = action ? 'L1' : levelFor(relevance, importance, override, this.config);
       const firedAngles = ANGLES.filter((angle: AngleName) => angleScore(angles, angle) > 0);
 
       const memory: Memory = {
@@ -260,9 +414,10 @@ export class AtomicEngine {
         kind: choice.kind,
         intent: angles.intent,
         firedAngles,
+        action,
         partyId,
         dealId,
-        dueAt: angles.intent === 'commit' ? angles.specifics.date : undefined,
+        dueAt: angles.intent === 'commit' ? angles.specifics.date ?? angles.specifics.dateTo : undefined,
         certainty,
         importance,
       };
@@ -274,19 +429,33 @@ export class AtomicEngine {
       }
       traces.push({
         text, speaker, relevance, level, kind: choice.kind, content: choice.content, certainty, importance,
-        override, change: angles.change, memoryId: memory.id, replaced,
+        override: override || Boolean(action), change: angles.change, memoryId: memory.id, replaced, action, replyTo,
+        facts: angles.specifics,
       });
       kept.push({ text, level });
+      previous = { text, speaker, facts: angles.specifics };
     }
 
     const summaryText = await this.models.summarizer.summarize(experience, kept);
     const summaryVector = await this.models.embedder.embed(summaryText);
     const links = await this.linkExperience(experience, summaryVector, now);
     await this.storage.putSummary({
-      experienceId: experience.id, text: summaryText, vector: summaryVector,
+      experienceId: experience.id, text: summaryText, vector: summaryVector, participants: experience.participants,
       partyId: context.partyId, dealId: context.dealId, occurredAt: experience.occurredAt,
     });
     return { experienceId: experience.id, statements: traces, summary: summaryText, links };
+  }
+
+  /** #0: relative time words become real dates once, against when they were said. The classifier's dates win. */
+  private resolveDates(facts: Facts, text: string, occurredAt: string): void {
+    if (facts.date || facts.dateFrom || facts.dateTo) return;
+    const resolved = resolveDate(text, occurredAt, this.config.dates);
+    if (!resolved) return;
+    facts.datePhrase = resolved.phrase;
+    if (resolved.unresolved) facts.dateUnresolved = true;
+    if (resolved.date) facts.date = resolved.date;
+    if (resolved.from) facts.dateFrom = resolved.from;
+    if (resolved.to) facts.dateTo = resolved.to;
   }
 
   /** Same party + deal with a shared fact: equal values = repeat, different values = update. */
@@ -295,6 +464,7 @@ export class AtomicEngine {
     if (!partyId || !dealId) return result;
     const active = await this.storage.findMemories({ level: 'L1', status: 'active', partyId, dealId });
     for (const memory of active) {
+      if (memory.action) continue;
       if (facts.item && memory.facts.item && facts.item !== memory.facts.item) continue;
       const shared = COMPARED_FACTS.filter((key) => facts[key] !== undefined && memory.facts[key] !== undefined);
       if (!shared.length) continue;
@@ -309,13 +479,14 @@ export class AtomicEngine {
 
   /** Decision #1: same party + deal and a changed fact -> new replaces old; old is kept and linked. */
   private async replaceOlder(memory: Memory): Promise<string[]> {
-    if (!memory.partyId || !memory.dealId) return [];
+    // Records of what happened (events, completed actions) never replace a statement, and are never replaced.
+    if (!memory.partyId || !memory.dealId || memory.action) return [];
     const active = await this.storage.findMemories({
       level: 'L1', status: 'active', partyId: memory.partyId, dealId: memory.dealId,
     });
     const replaced: string[] = [];
     for (const old of active) {
-      if (old.id === memory.id) continue;
+      if (old.id === memory.id || old.action) continue;
       if (memory.facts.item && old.facts.item && memory.facts.item !== old.facts.item) continue;
       const shared = COMPARED_FACTS.filter((key) => memory.facts[key] !== undefined && old.facts[key] !== undefined);
       if (!shared.length || shared.every((key) => memory.facts[key] === old.facts[key])) continue;
@@ -424,7 +595,10 @@ export class AtomicEngine {
     const open = await this.storage.findMemories({ level: 'L1', status: 'active' });
     for (const memory of open) {
       if (!memory.dueAt) continue;
-      const dueEnd = Date.parse(memory.dueAt) + (memory.dueAt.length === 10 ? DAY_MS : 0);
+      // A date-only due date lasts until the end of that local business day.
+      const dueEnd = memory.dueAt.length === 10
+        ? Date.parse(localDayRange(memory.dueAt, memory.dueAt, this.config.dates.utcOffsetMinutes).toIso) + 1
+        : Date.parse(memory.dueAt);
       if (Number.isNaN(dueEnd) || now.getTime() < dueEnd) continue;
       const events = await this.storage.listExperiences({ partyId: memory.partyId });
       const outcome = this.models.outcomeMatcher.match(memory, events);
