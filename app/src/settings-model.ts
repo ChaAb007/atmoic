@@ -14,7 +14,8 @@ export interface Settings {
 export const DEFAULT_SETTINGS: Settings = {
   apiKey: '',
   model: 'claude-opus-5-5',
-  effort: 'low',
+  // Medium: enough thought to discuss and push back, still quick enough for speech.
+  effort: 'medium',
   language: 'en-IN',
   speechRate: 1,
   userName: '',

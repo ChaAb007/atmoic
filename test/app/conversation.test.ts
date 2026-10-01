@@ -167,7 +167,8 @@ test('system prompt: time, honesty rules, spoken style, and memories with exact 
     ask: 'what discount?', now: new Date('2026-10-01T04:30:00.000Z'), userName: 'Abhishek', timeZone: 'Asia/Kolkata',
     memories: [{ experience, score: 0.7, similarity: 0.8, matched: 'L1' }],
   });
-  assert.match(system, /talking with Abhishek/);
+  assert.match(system, /AI co-founder of Abhishek/);
+  assert.match(system, /push back when you disagree/);
   assert.match(system, /Thursday, 1 October 2026/);
   assert.match(system, /never see earlier messages/);
   assert.match(system, /Never invent past conversations/);
