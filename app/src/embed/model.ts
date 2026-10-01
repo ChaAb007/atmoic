@@ -50,7 +50,7 @@ export async function loadModelEmbedder(onProgress: (progress: ModelProgress) =>
   });
 
   const send = (request: WorkerRequest) => worker.postMessage(request);
-  send({ type: 'load', model: MODEL_ID, wasmPaths: new URL('./ort/', document.baseURI).href });
+  send({ type: 'load', model: MODEL_ID });
   try {
     await ready;
   } catch (error) {

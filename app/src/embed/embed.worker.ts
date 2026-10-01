@@ -4,11 +4,11 @@ import type { FeatureExtractionPipeline } from '@huggingface/transformers';
 
 /**
  * Runs the multilingual sentence model off the main thread, so the face keeps animating while memory works.
- * Messages: {type:'load', model, wasmPaths} -> progress..., ready | error; {type:'embed', id, texts} -> vectors | error.
+ * Messages: {type:'load', model} -> progress..., ready | error; {type:'embed', id, texts} -> vectors | error.
  */
 
 export type WorkerRequest =
-  | { type: 'load'; model: string; wasmPaths: string }
+  | { type: 'load'; model: string }
   | { type: 'embed'; id: number; texts: string[] };
 
 export type WorkerResponse =
@@ -33,7 +33,9 @@ scope.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       env.useBrowserCache = true;
       const onnx = env.backends.onnx;
       if (onnx.wasm) {
-        onnx.wasm.wasmPaths = request.wasmPaths;
+        // transformers.js points the runtime at a CDN by default. Clearing it makes the runtime load the
+        // WASM file that Vite bundles next to this worker, so the app needs no CDN, only the model download.
+        onnx.wasm.wasmPaths = undefined;
         onnx.wasm.numThreads = 1;
       }
       extractor = await pipeline('feature-extraction', request.model, {

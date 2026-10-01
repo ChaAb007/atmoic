@@ -63,7 +63,13 @@ jobs:
             app/android/app/*.gradle*
             app/android/gradle/wrapper/gradle-wrapper.properties
 
+      # The runner's newer SDK command-line tools no longer ship the legacy 'tools' package that
+      # setup-android installs by default, so ask only for platform-tools; Gradle fetches the platform
+      # and build-tools it needs.
       - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
 
       # --ignore-scripts skips onnxruntime-node's postinstall, which downloads native binaries the app never uses.
       - name: Install dependencies
