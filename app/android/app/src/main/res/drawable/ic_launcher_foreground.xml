@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Surface mark: a glowing arc around a point of light. 108dp canvas; the art stays inside the
+     66dp safe zone. Each glow is the same arc drawn wider and fainter beneath the bright core. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Faint full ring the arc travels on. -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M54,30A24,24 0,1 1,54,78A24,24 0,1 1,54,30Z"
+        android:strokeWidth="1"
+        android:strokeAlpha="0.28"
+        android:strokeColor="#45B4FF" />
+
+    <!-- The arc, open at the bottom: haze, glow, body, hot core. -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M42,74.785A24,24 0,1 1,66,74.785"
+        android:strokeWidth="15"
+        android:strokeAlpha="0.10"
+        android:strokeColor="#1E6BFF"
+        android:strokeLineCap="round" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M42,74.785A24,24 0,1 1,66,74.785"
+        android:strokeWidth="10"
+        android:strokeAlpha="0.18"
+        android:strokeColor="#2F8CFF"
+        android:strokeLineCap="round" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M42,74.785A24,24 0,1 1,66,74.785"
+        android:strokeWidth="6"
+        android:strokeAlpha="0.45"
+        android:strokeColor="#45B4FF"
+        android:strokeLineCap="round" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M42,74.785A24,24 0,1 1,66,74.785"
+        android:strokeWidth="3.2"
+        android:strokeColor="#7FD8FF"
+        android:strokeLineCap="round" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M42,74.785A24,24 0,1 1,66,74.785"
+        android:strokeWidth="1.2"
+        android:strokeAlpha="0.95"
+        android:strokeColor="#F0FBFF"
+        android:strokeLineCap="round" />
+
+    <!-- Point of light at the centre. -->
+    <path
+        android:fillAlpha="0.12"
+        android:fillColor="#2F8CFF"
+        android:pathData="M54,45A9,9 0,1 1,54,63A9,9 0,1 1,54,45Z" />
+    <path
+        android:fillAlpha="0.32"
+        android:fillColor="#45B4FF"
+        android:pathData="M54,48.5A5.5,5.5 0,1 1,54,59.5A5.5,5.5 0,1 1,54,48.5Z" />
+    <path
+        android:fillColor="#CFF3FF"
+        android:pathData="M54,51A3,3 0,1 1,54,57A3,3 0,1 1,54,51Z" />
+</vector>

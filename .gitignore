@@ -7,3 +7,14 @@ app/android/local.properties
 app/android/app/src/main/assets/public/
 app/android/capacitor-cordova-android-plugins/build/
 *.log
+
+# Android shell: Capacitor regenerates these on `npx cap sync android`; the project sources stay tracked.
+app/android/app/src/main/assets/capacitor.config.json
+app/android/app/src/main/assets/capacitor.plugins.json
+app/android/app/src/main/res/xml/config.xml
+app/android/capacitor-cordova-android-plugins/
+app/android/.idea/
+*.apk
+*.aab
+*.jks
+*.keystore

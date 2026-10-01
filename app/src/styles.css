@@ -87,6 +87,8 @@ button { font: inherit; color: inherit; cursor: pointer; }
   display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px;
   border: 1px solid var(--line); background: rgba(79, 141, 255, 0.09); font-size: 12.5px;
 }
+.chip svg { width: 16px; height: 16px; }
+button.chip { min-height: 30px; }
 .chip.good { border-color: rgba(61, 220, 151, 0.5); }
 .chip.bad { border-color: rgba(255, 107, 129, 0.5); }
 .meta .spacer { flex: 1; }

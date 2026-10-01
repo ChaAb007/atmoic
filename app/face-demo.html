@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
+    <meta name="theme-color" content="#050a1c" />
+    <title>Holo Face Demo</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg-top: #0a1736;
+        --bg-bottom: #02050f;
+        --ink: #cfe6ff;
+        --muted: #6f8bb8;
+        --line: rgba(120, 180, 255, 0.28);
+        --chip: rgba(18, 36, 78, 0.6);
+        --chip-on: rgba(56, 140, 255, 0.35);
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: radial-gradient(120% 80% at 50% 30%, var(--bg-top), var(--bg-bottom));
+        color: var(--ink);
+        font: 14px/1.4 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+        overflow: hidden;
+      }
+      #face {
+        position: fixed;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+      .controls {
+        position: fixed;
+        left: 16px;
+        right: 16px;
+        bottom: max(16px, env(safe-area-inset-bottom));
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        justify-content: center;
+      }
+      .controls button {
+        min-height: 40px;
+        padding: 8px 14px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: var(--chip);
+        color: var(--ink);
+        font: inherit;
+        letter-spacing: 0.02em;
+        backdrop-filter: blur(6px);
+      }
+      .controls button[aria-pressed='true'] {
+        background: var(--chip-on);
+        border-color: rgba(150, 210, 255, 0.7);
+      }
+      .status {
+        position: fixed;
+        top: max(16px, env(safe-area-inset-top));
+        left: 16px;
+        right: 16px;
+        text-align: center;
+        color: var(--muted);
+        font-size: 12px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="face" aria-label="Holographic face"></canvas>
+    <div class="status" id="status">Ready</div>
+    <div class="controls" id="controls">
+      <button type="button" data-state="ready" aria-pressed="true">Ready</button>
+      <button type="button" data-state="listening" aria-pressed="false">Listening</button>
+      <button type="button" data-state="thinking" aria-pressed="false">Thinking</button>
+      <button type="button" data-state="speaking" aria-pressed="false">Speaking</button>
+      <button type="button" id="speak">Speak sample</button>
+    </div>
+    <script type="module" src="/src/face/demo.ts"></script>
+  </body>
+</html>
