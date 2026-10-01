@@ -98,6 +98,31 @@ void rigHead(inout vec3 p, inout vec3 n) {
 }
 `;
 
+/**
+ * Every fragment shader ends with glow(). The canvas is composited over the page as premultiplied
+ * alpha, so a plain additive blend would pile up alpha until the canvas turned opaque and hid the
+ * page background. Instead each fragment adds premultiplied light whose alpha is its brightest
+ * channel: still valid premultiplied, and dark wherever the hologram is dark. Color is clamped
+ * before weighting, as fixed-point blending would, so dim dots never subtract light.
+ */
+const GLOW = /* glsl */ `
+vec4 glow(vec3 color, float alpha) {
+  vec3 c = clamp(color, 0.0, 1.0) * clamp(alpha, 0.0, 1.0);
+  return vec4(c, max(max(c.r, c.g), c.b));
+}
+`;
+
+/**
+ * 1 well inside the canvas, 0 at its edges (clip-space input). With a transparent canvas, anything
+ * the viewport clipped (shoulders, rings, orbs, the halo) would otherwise end in a hard line.
+ */
+const EDGE = /* glsl */ `
+float edgeFade(vec4 clip) {
+  vec2 ndc = abs(clip.xy / max(clip.w, 1e-4));
+  return (1.0 - smoothstep(0.8, 1.0, ndc.x)) * (1.0 - smoothstep(0.85, 1.0, ndc.y));
+}
+`;
+
 const LIGHT = /* glsl */ `
 uniform vec3 uColorBase;
 uniform vec3 uColorRim;
@@ -118,6 +143,7 @@ uniform float uPixelRatio;
 uniform float uPointScale;
 ${RIG}
 ${LIGHT}
+${EDGE}
 varying vec3 vColor;
 varying float vAlpha;
 
@@ -166,11 +192,13 @@ void main() {
   gl_PointSize = aSize * halftone * uPointScale * uPixelRatio / -mv.z;
 #endif
   gl_Position = projectionMatrix * mv;
+  vAlpha *= edgeFade(gl_Position);
 }
 `;
 
 /** Soft round dot with a bright core. */
 export const DOT_FRAGMENT = /* glsl */ `
+${GLOW}
 varying vec3 vColor;
 varying float vAlpha;
 
@@ -178,23 +206,25 @@ void main() {
   vec2 c = gl_PointCoord - 0.5;
   float d2 = dot(c, c) * 4.0;
   if (d2 > 1.0) discard;
-  float glow = (1.0 - d2) * (0.35 + 0.65 * exp(-d2 * 5.0));
-  gl_FragColor = vec4(vColor, vAlpha * glow);
+  float falloff = (1.0 - d2) * (0.35 + 0.65 * exp(-d2 * 5.0));
+  gl_FragColor = glow(vColor, vAlpha * falloff);
 }
 `;
 
 export const LINE_FRAGMENT = /* glsl */ `
+${GLOW}
 varying vec3 vColor;
 varying float vAlpha;
 
 void main() {
-  gl_FragColor = vec4(vColor, vAlpha);
+  gl_FragColor = glow(vColor, vAlpha);
 }
 `;
 
 export const SHELL_VERTEX = /* glsl */ `
 attribute float aAmbient;
 ${RIG}
+${EDGE}
 varying float vRim;
 varying float vFade;
 varying float vY;
@@ -213,12 +243,14 @@ void main() {
     * revealed(position.y);
   vY = p.y;
   gl_Position = projectionMatrix * mv;
+  vFade *= edgeFade(gl_Position);
 }
 `;
 
 export const SHELL_FRAGMENT = /* glsl */ `
 uniform float uTime;
 ${LIGHT}
+${GLOW}
 varying float vRim;
 varying float vFade;
 varying float vY;
@@ -227,7 +259,7 @@ void main() {
   float lines = 0.8 + 0.2 * sin(vY * 260.0 - uTime * 3.0);
   float scan = exp(-pow((vY - uScan) * 9.0, 2.0));
   vec3 color = uColorRim * vRim * (0.5 * lines + 0.5 * scan) + uColorBase * 0.02;
-  gl_FragColor = vec4(color * uIntensity * vFade, 1.0);
+  gl_FragColor = glow(color * uIntensity * vFade, 1.0);
 }
 `;
 
@@ -247,6 +279,7 @@ uniform vec3 uColorRim;
 uniform vec3 uColorBase;
 uniform vec3 uColorAccent;
 uniform float uIntensity;
+${EDGE}
 varying vec3 vColor;
 varying float vAlpha;
 varying float vOrb;
@@ -271,10 +304,12 @@ void main() {
   vAlpha = edge * (0.3 + 0.7 * depth) * (vOrb > 0.5 ? 0.9 : 0.85) * (1.0 - 0.9 * overFace);
   gl_PointSize = aSize * uPointScale * uPixelRatio / -mv.z;
   gl_Position = projectionMatrix * mv;
+  vAlpha *= edgeFade(gl_Position);
 }
 `;
 
 export const MOTES_FRAGMENT = /* glsl */ `
+${GLOW}
 varying vec3 vColor;
 varying float vAlpha;
 varying float vOrb;
@@ -286,7 +321,7 @@ void main() {
   // Orbs get a bright rim and core like small glass spheres; motes are plain soft dots.
   float sphere = 0.3 * exp(-d2 * 2.0) + 0.6 * smoothstep(0.55, 0.9, d2) * (1.0 - d2) * 4.0 + 1.2 * exp(-d2 * 14.0);
   float soft = (1.0 - d2) * exp(-d2 * 3.0);
-  gl_FragColor = vec4(vColor, vAlpha * mix(soft, sphere, vOrb));
+  gl_FragColor = glow(vColor, vAlpha * mix(soft, sphere, vOrb));
 }
 `;
 
@@ -299,6 +334,7 @@ uniform float uPixelRatio;
 uniform float uPointScale;
 uniform vec3 uColorRim;
 uniform float uIntensity;
+${EDGE}
 varying vec3 vColor;
 varying float vAlpha;
 
@@ -321,6 +357,7 @@ void main() {
   vAlpha = uListen * (0.35 + 0.65 * smoothstep(-0.5, 0.3, p.z));
   gl_PointSize = (0.008 + comet * 0.006) * uPointScale * uPixelRatio / -mv.z;
   gl_Position = projectionMatrix * mv;
+  vAlpha *= edgeFade(gl_Position);
 }
 `;
 
@@ -335,6 +372,7 @@ uniform vec3 uColorRim;
 uniform vec3 uColorAccent;
 uniform float uIntensity;
 uniform float uRibbonY;
+${EDGE}
 varying vec3 vColor;
 varying float vAlpha;
 
@@ -351,16 +389,19 @@ void main() {
   vAlpha = uSpeak * envelope * (0.95 - 0.12 * i);
   gl_PointSize = 0.011 * uPointScale * uPixelRatio / -mv.z;
   gl_Position = projectionMatrix * mv;
+  vAlpha *= edgeFade(gl_Position);
 }
 `;
 
 /** A cheap glow behind the head instead of a bloom pass. */
 export const HALO_VERTEX = /* glsl */ `
 varying vec2 vUv;
+varying vec4 vClip;
 
 void main() {
   vUv = uv;
   gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  vClip = gl_Position;
 }
 `;
 
@@ -373,6 +414,9 @@ uniform float uLevel;
 uniform float uThink;
 uniform float uTime;
 varying vec2 vUv;
+varying vec4 vClip;
+${GLOW}
+${EDGE}
 
 void main() {
   vec2 c = (vUv - 0.5) * vec2(2.0, 2.0);
@@ -381,6 +425,6 @@ void main() {
   float wide = exp(-r2 * 2.2);
   float pulse = 1.0 + uThink * 0.3 * sin(uTime * 2.4) + uListen * uLevel * 0.3;
   vec3 color = (uColorBase * wide * 0.09 + uColorRim * head * 0.06) * pulse * uIntensity;
-  gl_FragColor = vec4(color, 1.0);
+  gl_FragColor = glow(color, edgeFade(vClip));
 }
 `;

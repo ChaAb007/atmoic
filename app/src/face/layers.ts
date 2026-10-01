@@ -104,6 +104,9 @@ function glowMaterial(
     defines,
     transparent: true,
     blending: AdditiveBlending,
+    // The shaders output premultiplied color (see glow() in shaders.ts), so three adds it with
+    // ONE, ONE and the canvas alpha only grows where there is light.
+    premultipliedAlpha: true,
     depthWrite: false,
     depthTest: false,
   });

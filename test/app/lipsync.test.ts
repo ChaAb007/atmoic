@@ -77,6 +77,22 @@ test('Devanagari still opens and closes the mouth', () => {
   assert.ok(timeline.duration > 0);
 });
 
+test('Devanagari: फ़ is lip-on-teeth, a nukta keeps the inherent vowel, word-final "a" is silent', () => {
+  const phone = buildVisemeTimeline('फ़ोन', 10);
+  const fa = shapeAtChar(phone, 0);
+  assert.ok(fa.open > 0 && fa.wide < 0, 'फ़ ("f") does not shut the lips like फ');
+  assert.equal(shapeAtChar(buildVisemeTimeline('फल', 10), 0).open, 0, 'plain फ still closes them');
+
+  const shapes = (text: string) => buildVisemeTimeline(text, 10).keys.map((key) => key.shape);
+  assert.deepEqual(shapes('ज़रा'), shapes('जरा'), 'ज़रा opens for "za" just like जरा');
+
+  // आप is "aap": the lips close on प and stay closed until the next word.
+  const text = 'आप कैसे';
+  const timeline = buildVisemeTimeline(text, 10);
+  const during = timeline.keys.filter((key) => key.time >= timeAtChar(timeline, 1) && key.time < timeAtChar(timeline, 2));
+  assert.ok(during.length > 0 && during.every((key) => key.shape.open === 0), 'no extra "a" after प');
+});
+
 test('timeAtChar maps a boundary index to that character\'s start time', () => {
   const text = 'aaa mmm ooo';
   const timeline = buildVisemeTimeline(text, 10);

@@ -74,6 +74,9 @@ const DEVANAGARI_VOWELS: Record<number, MouthShape> = {
 
 const VIRAMA = 0x094d;
 const NUKTA = 0x093c;
+const PHA = 0x092b;
+/** फ़ as one precomposed letter. */
+const FA = 0x095e;
 
 function isDevanagariConsonant(code: number): boolean {
   return (code >= 0x0915 && code <= 0x0939) || (code >= 0x0958 && code <= 0x095f);
@@ -83,27 +86,41 @@ function isDevanagariSign(code: number): boolean {
   return code === VIRAMA || code === NUKTA || (code >= 0x093e && code <= 0x094c);
 }
 
-function devanagariConsonant(code: number): MouthShape {
+/** Letters, vowel signs and marks that continue a word (not danda, digits, spaces or punctuation). */
+function isDevanagariWordPart(code: number): boolean {
+  return code >= 0x0900 && code <= 0x0963;
+}
+
+function devanagariConsonant(code: number, nextCode: number): MouthShape {
+  // फ़ is "f" (teeth on lip); plain फ is an aspirated "p" that closes the lips.
+  if (code === FA || (code === PHA && nextCode === NUKTA)) return SHAPE.labiodental;
   if (code >= 0x092a && code <= 0x092e) return SHAPE.closed; // प फ ब भ म
   if (code === 0x0935) return SHAPE.labiodental; // व
   if (code === 0x092f) return SHAPE.i; // य
   return SHAPE.consonant;
 }
 
+/** The short "a" a bare consonant carries. Hindi drops it at the end of a word: आप is "aap", not "aapa". */
+function inherentVowel(nextCode: number): VisemePart {
+  return isDevanagariWordPart(nextCode) ? { shape: SHAPE.schwa, units: 0.75 } : { shape: null, units: 0.3 };
+}
+
 function devanagariParts(code: number, nextCode: number): VisemePart[] {
   const vowel = DEVANAGARI_VOWELS[code];
   if (vowel) return [{ shape: vowel, units: isDevanagariSign(code) ? 0.8 : 1 }];
   if (isDevanagariConsonant(code)) {
-    const consonant = devanagariConsonant(code);
-    // Without a following vowel sign or virama the consonant carries an inherent short "a".
+    const consonant = devanagariConsonant(code, nextCode);
+    // A nukta only changes the letter; its own step decides whether the inherent vowel follows.
+    if (nextCode === NUKTA) return [{ shape: consonant, units: 0.45 }];
     if (isDevanagariSign(nextCode)) return [{ shape: consonant, units: 0.7 }];
-    return [{ shape: consonant, units: 0.45 }, { shape: SHAPE.schwa, units: 0.75 }];
+    return [{ shape: consonant, units: 0.45 }, inherentVowel(nextCode)];
   }
+  if (code === NUKTA) return [isDevanagariSign(nextCode) ? { shape: null, units: 0.25 } : inherentVowel(nextCode)];
   if (code === 0x0901 || code === 0x0902) return [{ shape: SHAPE.nasal, units: 0.5 }]; // ँ ं
   if (code === 0x0903) return [{ shape: SHAPE.consonant, units: 0.5 }]; // ः
   if (code === 0x0964 || code === 0x0965) return [{ shape: SHAPE.closed, units: SENTENCE_PAUSE }]; // । ॥
   if (code >= 0x0966 && code <= 0x096f) return [{ shape: SHAPE.schwa, units: 1 }]; // digits
-  return [{ shape: null, units: 0 }]; // virama, nukta and other marks
+  return [{ shape: null, units: 0 }]; // virama and other marks
 }
 
 function punctuationParts(char: string): VisemePart[] | null {
