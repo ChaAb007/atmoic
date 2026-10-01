@@ -7,7 +7,7 @@ import { Conversation } from '../../app/src/conversation.ts';
 import type { StartReply, TurnView } from '../../app/src/conversation.ts';
 import type { Face, LipSync, Voice } from '../../app/src/contracts.ts';
 import { buildMessages, buildSystemPrompt, renderMemories } from '../../app/src/llm/prompt.ts';
-import { DEFAULT_SETTINGS } from '../../app/src/settings.ts';
+import { DEFAULT_SETTINGS } from '../../app/src/settings-model.ts';
 import { SentenceStream, speakable } from '../../app/src/speech/sentences.ts';
 import { HashEmbedder } from '../../app/src/embed/hash.ts';
 import { ConceptEmbedder, TestClock } from '../atomic-v2/helpers.ts';

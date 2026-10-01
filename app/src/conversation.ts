@@ -2,7 +2,7 @@ import type { Experience, RecallItem, RecallResult } from '@atomic-v2';
 import type { Face, LipSync, Voice } from './contracts.ts';
 import { buildMessages, buildSystemPrompt } from './llm/prompt.ts';
 import { SentenceStream, speakable } from './speech/sentences.ts';
-import type { Settings } from './settings.ts';
+import type { Settings } from './settings-model.ts';
 
 /** The parts of Atomic the conversation needs (the real AtomicV2 satisfies it). */
 export interface Memory {

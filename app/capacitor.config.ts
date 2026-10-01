@@ -7,7 +7,8 @@ const config: CapacitorConfig = {
   backgroundColor: '#060b1a',
   android: {
     allowMixedContent: false,
-    captureInput: true,
+    // captureInput stays off: it swaps the IME connection for a bare one, which breaks composing
+    // text, suggestions and swipe typing in the chat box.
     // Debug prototype: lets chrome://inspect attach to the WebView.
     webContentsDebuggingEnabled: true,
   },

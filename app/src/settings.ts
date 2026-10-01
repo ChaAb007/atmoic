@@ -1,26 +1,9 @@
 import { Preferences } from '@capacitor/preferences';
-import type { Effort } from './llm/claude.ts';
+import { DEFAULT_SETTINGS } from './settings-model.ts';
+import type { Settings } from './settings-model.ts';
 
-export interface Settings {
-  apiKey: string;
-  model: string;
-  effort: Effort;
-  /** Speech recognition and voice language, e.g. en-IN or hi-IN. */
-  language: string;
-  speechRate: number;
-  userName: string;
-  speakReplies: boolean;
-}
-
-export const DEFAULT_SETTINGS: Settings = {
-  apiKey: '',
-  model: 'claude-opus-5-5',
-  effort: 'low',
-  language: 'en-IN',
-  speechRate: 1,
-  userName: '',
-  speakReplies: true,
-};
+export { DEFAULT_SETTINGS };
+export type { Settings };
 
 const KEY = 'surface.settings.v1';
 

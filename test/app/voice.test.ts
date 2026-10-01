@@ -312,6 +312,22 @@ test('web voice without recognition: canListen is false and nothing throws', asy
   await voice.stopSpeaking();
 });
 
+test('web listen: a recognizer constructor that throws resolves empty instead of throwing', async () => {
+  class DisabledRecognizer {
+    constructor() {
+      throw new Error('speech recognition disabled by policy');
+    }
+  }
+  const voice = new WebVoice({ Recognition: DisabledRecognizer } as unknown as WebSpeechEnv);
+  const warn = console.warn;
+  console.warn = () => undefined;
+  try {
+    assert.equal(await within(voice.listen({ lang: 'en-US', onPartial: () => undefined })), '');
+  } finally {
+    console.warn = warn;
+  }
+});
+
 /** A SpeechRecognition stand-in whose results the test drives. */
 class FakeRecognizer {
   static last: FakeRecognizer | undefined;

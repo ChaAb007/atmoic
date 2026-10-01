@@ -102,9 +102,8 @@ export class WebVoice implements Voice {
 
   listen(options: ListenOptions): Promise<string> {
     this.abortActiveListen();
-    const Recognition = this.env.Recognition;
-    if (!Recognition || !this.listenSupported) return Promise.resolve('');
-    const recognizer = new Recognition();
+    const recognizer = this.listenSupported ? createRecognizer(this.env.Recognition) : undefined;
+    if (!recognizer) return Promise.resolve('');
     const session = new ListenSession({
       timing: this.timing,
       onPartial: options.onPartial,
@@ -218,6 +217,18 @@ export class WebVoice implements Voice {
     this.activeListen = undefined;
     active.session.finish();
     release(active.recognizer);
+  }
+}
+
+/** A new recognizer, or undefined when the browser has none or refuses to create one. */
+function createRecognizer(Recognition: RecognizerConstructor | undefined): RecognizerLike | undefined {
+  if (!Recognition) return undefined;
+  try {
+    return new Recognition();
+  } catch (error) {
+    // Some browsers expose the constructor but disable the feature (policy, flags).
+    console.warn('[voice] speech recognition unavailable', error);
+    return undefined;
   }
 }
 

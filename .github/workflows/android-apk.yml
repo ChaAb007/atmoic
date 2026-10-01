@@ -24,8 +24,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
 
-      # Atomic, Atomic v2 and app tests run straight from TypeScript; nothing to install.
+      # The tests run straight from TypeScript, but app modules under test import Capacitor
+      # plugins (e.g. settings.ts -> @capacitor/preferences), which resolve from app/node_modules.
+      - name: Install app dependencies
+        working-directory: app
+        run: npm ci --ignore-scripts
+
       - name: Run tests
         run: npm test
 
