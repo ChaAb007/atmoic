@@ -105,7 +105,7 @@ export interface RecallItem {
   score: number;
   similarity: number;
   /** Which part matched best. */
-  matched: Level | 'combined' | 'unit';
+  matched: Level | 'combined' | 'unit' | 'ask';
 }
 
 export interface RecallResult {

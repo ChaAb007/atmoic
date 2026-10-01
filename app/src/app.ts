@@ -8,6 +8,7 @@ import { TextLipSync } from './face/lipsync.ts';
 import type { Platform } from './platform.ts';
 import { DEFAULT_SETTINGS, loadSettings, saveSettings } from './settings.ts';
 import type { Settings } from './settings.ts';
+import { ORBITAI_STORY, loadStory } from './seed/orbitai-story.ts';
 import { icons } from './ui/icons.ts';
 import { renderExperience, renderRecalled, renderRecent, renderStats } from './ui/inspector.ts';
 
@@ -55,7 +56,7 @@ root.innerHTML = `
   <h3>Recalled for the last answer</h3><div data-recalled></div>
   <h3>Last exchange</h3><div data-experience></div>
   <h3>Recent memories</h3><div data-recent></div>
-  <div class="actions"><button class="secondary" data-export${platform.exportMemory ? '' : ' hidden'}>Export memory file</button><button class="danger" data-clear>Clear all memory</button></div>
+  <div class="actions"><button class="secondary" data-story>Load the OrbitAI story</button><button class="secondary" data-export${platform.exportMemory ? '' : ' hidden'}>Export memory file</button><button class="danger" data-clear>Clear all memory</button></div>
 </div></div>
 <div class="boot"><div class="box"><h2>Preparing memory</h2><p data-boot-text>Loading…</p><div class="progress"><div></div></div><button class="secondary" data-skip-model hidden>Use basic memory for now</button></div></div>`;
 
@@ -273,6 +274,19 @@ memoryPanel.addEventListener('click', async (event) => {
     button.textContent = 'Clear all memory';
     await atomic.clear();
     renderMemory();
+  } else if (target.closest('[data-story]')) {
+    const button = target.closest<HTMLButtonElement>('[data-story]')!;
+    button.disabled = true;
+    try {
+      const added = await loadStory(atomic, ORBITAI_STORY, (done, total) => {
+        button.textContent = `Loading the story… ${done}/${total}`;
+      });
+      button.textContent = added ? `Story loaded: ${added} memories from March–April 2026` : 'The story is already in memory';
+      renderMemory();
+    } catch (error) {
+      button.textContent = `Story did not load: ${error instanceof Error ? error.message : String(error)}`;
+      button.disabled = false;
+    }
   } else if (target.closest('[data-export]')) {
     await exportMemory(atomic.exportJson());
   }

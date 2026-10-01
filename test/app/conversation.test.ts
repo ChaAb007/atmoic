@@ -10,6 +10,7 @@ import { buildMessages, buildSystemPrompt, renderMemories } from '../../app/src/
 import { DEFAULT_SETTINGS } from '../../app/src/settings-model.ts';
 import { SentenceStream, speakable } from '../../app/src/speech/sentences.ts';
 import { HashEmbedder } from '../../app/src/embed/hash.ts';
+import { ORBITAI_STORY, loadStory } from '../../app/src/seed/orbitai-story.ts';
 import { ConceptEmbedder, TestClock } from '../atomic-v2/helpers.ts';
 
 type Request = Parameters<StartReply>[0];
@@ -207,6 +208,31 @@ test('with the fallback embedder, a later question recalls the earlier order and
   const discount = await atomic.recall('What discount did we give AVI last time?');
   assert.match(discount.items[0]?.experience.response ?? '', /3 percent/);
   assert.equal(discount.items.some((item) => /Sharma/.test(item.experience.ask)), false);
+});
+
+test('the OrbitAI story loads once, back-dated, in time order, and answers questions about it', async () => {
+  const now = new Date('2026-10-01T12:00:00+05:30');
+  const atomic = await AtomicV2.open({ embedder: new HashEmbedder(), store: new InMemoryStore(), config: HashEmbedder.config, now: () => now });
+  await atomic.process({ ask: 'Good morning, what should I do first today?', response: 'Start with the payment follow-ups.', at: now.toISOString() });
+  assert.equal(await loadStory(atomic, ORBITAI_STORY), ORBITAI_STORY.length);
+  assert.equal(await loadStory(atomic, ORBITAI_STORY), 0, 'loading again adds nothing');
+  const newestFirst = atomic.list(atomic.size);
+  assert.match(newestFirst[0].ask, /Good morning/, 'today stays the newest memory');
+  const times = newestFirst.map((experience) => Date.parse(experience.at));
+  assert.deepEqual(times, [...times].sort((a, b) => b - a));
+  const oldest = (now.getTime() - Date.parse(newestFirst.at(-1)!.at)) / 86_400_000;
+  assert.ok(oldest > 180 && oldest < 220, `story starts about six months back (${oldest.toFixed(0)} days)`);
+  for (const [question, answer] of [
+    ['Who is my co-founder?', /Neha Kapoor/],
+    ['Who is Arjun?', /Arjun Rao/],
+    ['What went wrong with the server?', /server went down/],
+    ['Why no dashboard?', /dashboard/],
+  ] as const) {
+    // Surface reads every recalled memory, so the right one must come back; six months of decay may rank it below
+    // a fresh memory that only shares phrasing.
+    const top = (await atomic.recall(question)).items.map((item) => `${item.experience.ask} ${item.experience.response}`);
+    assert.ok(top.some((text) => answer.test(text)), `${question} -> ${top.join(' | ')}`);
+  }
 });
 
 test('recall result type used by the conversation is the engine type', async () => {

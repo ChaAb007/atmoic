@@ -122,6 +122,9 @@ export class AtomicV2 {
       const candidates: [RecallItem['matched'], number][] = [
         ['combined', cosine(query, experience.combined)],
         ['unit', cosine(query, experience.unitVector)],
+        // A new question often mirrors an old one ("who is Arjun?" after "hiring Arjun as ..."), so the old ask
+        // alone is compared too; the full exchange would dilute it.
+        ['ask', cosine(query, experience.askVector)],
         ...(['L1', 'L2', 'L3', 'L4'] as const)
           .filter((level) => experience.levelVectors[level])
           .map((level): [Level, number] => [level, cosine(query, experience.levelVectors[level])]),
@@ -142,9 +145,15 @@ export class AtomicV2 {
   /** Push one ask + response through the four layers and keep the experience. */
   process(input: ProcessInput): Promise<Experience> {
     return this.serial(async () => {
-      const experience = await this.build(input, crypto.randomUUID(), this.experiences);
+      // An exchange dated in the past (imported history) is judged only against what came before it.
+      const at = Date.parse(input.at ?? this.now().toISOString());
+      const past = this.experiences.filter((experience) => Date.parse(experience.at) <= at);
+      const experience = await this.build(input, crypto.randomUUID(), past);
       this.reactToEarlier(experience);
-      this.experiences.push(experience);
+      // Keep time order, so "newest first" and follow-up windows hold for back-dated exchanges too.
+      const later = this.experiences.findIndex((other) => Date.parse(other.at) > at);
+      if (later === -1) this.experiences.push(experience);
+      else this.experiences.splice(later, 0, experience);
       await this.save();
       return experience;
     });
