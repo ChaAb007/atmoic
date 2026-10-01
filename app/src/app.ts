@@ -25,16 +25,16 @@ root.innerHTML = `
 <main class="stage">
   <p class="banner" hidden></p>
   <div class="face-wrap"><canvas aria-label="Surface face"></canvas></div>
-  <section class="caption"><h1>Hey, I'm Surface.</h1><p>Talk or type. I remember only what Atomic keeps on this phone.</p></section>
+  <section class="caption"><h1>Hey, I'm Surface.</h1><p>${platform.voice.canListen ? 'Talk or type.' : 'Type to me.'} I remember only what Atomic keeps ${platform.where}.</p></section>
   <section class="turn" hidden aria-live="polite">
     <div class="you"><b>You</b> · <span class="ask"></span></div>
     <div class="reply"></div>
     <div class="meta"></div>
   </section>
-  <div class="mic-row"><button class="mic" data-mode="ready" aria-label="Talk">${icons.mic}</button><span class="mic-label">Tap to talk</span></div>
+  <div class="mic-row"${platform.voice.canListen ? '' : ' hidden'}><button class="mic" data-mode="ready" aria-label="Talk">${icons.mic}</button><span class="mic-label">Tap to talk</span></div>
 </main>
 <form class="composer">
-  <textarea rows="1" placeholder="Ask anything… (or tap the mic to talk)" aria-label="Message"></textarea>
+  <textarea rows="1" placeholder="${platform.voice.canListen ? 'Ask anything… (or tap the mic to talk)' : 'Ask anything…'}" aria-label="Message"></textarea>
   <button class="send" type="submit" aria-label="Send">${icons.send}</button>
 </form>
 <div class="sheet" data-sheet="settings"><div class="scrim" data-close></div><div class="panel">
@@ -94,6 +94,8 @@ function setMode(state: FaceState | 'error', title?: string, text?: string) {
   mic.dataset.mode = state;
   micLabel.textContent = state === 'listening' ? 'Tap to stop' : state === 'ready' || state === 'error' ? 'Tap to talk' : 'Tap to interrupt';
   mic.innerHTML = state === 'ready' || state === 'error' ? icons.mic : icons.stop;
+  // Without a microphone the button only appears as a stop button while Surface thinks or speaks.
+  if (!voice.canListen) mic.parentElement!.hidden = state === 'ready' || state === 'error';
   if (state !== 'error') face?.setState(state);
   if (title !== undefined) caption.title.textContent = title;
   if (text !== undefined) caption.text.textContent = text;
@@ -245,7 +247,7 @@ function renderMemory() {
   memoryPanel.querySelector('[data-stats]')!.innerHTML = renderStats(atomic.stats(), embedderNote);
   memoryPanel.querySelector('[data-recalled]')!.innerHTML = renderRecalled(lastTurn?.memories ?? [], now);
   memoryPanel.querySelector('[data-experience]')!.innerHTML = renderExperience(lastTurn?.experience);
-  memoryPanel.querySelector('[data-recent]')!.innerHTML = renderRecent(atomic.list(30), now);
+  memoryPanel.querySelector('[data-recent]')!.innerHTML = renderRecent(atomic.list(30), now, platform.where);
 }
 
 memoryPanel.addEventListener('click', async (event) => {
@@ -256,10 +258,21 @@ memoryPanel.addEventListener('click', async (event) => {
     await atomic.forget(forget.dataset.forget!);
     renderMemory();
   } else if (target.closest('[data-clear]')) {
-    if (confirm('Clear all memory on this phone? This cannot be undone.')) {
-      await atomic.clear();
-      renderMemory();
+    // Two taps instead of confirm(): some hosts (an embedded preview) never show browser dialogs.
+    const button = target.closest<HTMLButtonElement>('[data-clear]')!;
+    if (button.dataset.armed !== 'yes') {
+      button.dataset.armed = 'yes';
+      button.textContent = 'Tap again to erase everything';
+      setTimeout(() => {
+        delete button.dataset.armed;
+        button.textContent = 'Clear all memory';
+      }, 4000);
+      return;
     }
+    delete button.dataset.armed;
+    button.textContent = 'Clear all memory';
+    await atomic.clear();
+    renderMemory();
   } else if (target.closest('[data-export]')) {
     await exportMemory(atomic.exportJson());
   }
@@ -295,6 +308,7 @@ async function start() {
   atomic = await AtomicV2.open({
     embedder: choice.embedder,
     store: platform.store,
+    config: choice.config,
     onProgress: (stage, done, total) => {
       text.textContent = stage === 'anchors' ? `Calibrating memory layers… ${done}/${total}` : `Upgrading memory to the new model… ${done}/${total}`;
     },

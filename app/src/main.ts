@@ -16,6 +16,7 @@ const platform: Platform = {
   voice: createVoice(),
   store: createMemoryStore(),
   noMicrophoneText: 'Speech recognition is not available here. Type instead.',
+  where: 'on this phone',
   startReply: ({ settings, system, messages, onText }) =>
     streamReply({ apiKey: settings.apiKey, model: settings.model, effort: settings.effort, system, messages, onText }),
   async chooseEmbedder(ui): Promise<EmbedderChoice> {
@@ -28,10 +29,11 @@ const platform: Platform = {
       const winner = await Promise.race([model, ui.offerSkip(4000).then(() => 'skip' as const)]);
       if (winner !== 'skip') return { embedder: winner, note: 'on-device multilingual model' };
       model.catch(() => undefined);
-      return { embedder: new HashEmbedder(), note: 'basic memory (spelling only) until the model loads' };
+      return { embedder: new HashEmbedder(), config: HashEmbedder.config, note: 'basic memory (spelling only) until the model loads' };
     } catch (error) {
       return {
         embedder: new HashEmbedder(),
+        config: HashEmbedder.config,
         note: 'basic memory (spelling only): the model could not load',
         warning: `Basic memory mode: ${error instanceof Error ? error.message : String(error)}. Memory upgrades itself when the model loads next time.`,
       };

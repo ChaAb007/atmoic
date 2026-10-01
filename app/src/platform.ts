@@ -1,4 +1,4 @@
-import type { Embedder, MemoryStore } from '@atomic-v2';
+import type { AtomicV2Config, Embedder, MemoryStore } from '@atomic-v2';
 import type { Voice } from './contracts.ts';
 import type { StartReply } from './conversation.ts';
 
@@ -16,6 +16,8 @@ export interface EmbedderChoice {
   note: string;
   /** Shown as a banner when memory runs in a reduced mode. */
   warning?: string;
+  /** Tuning that belongs to this embedder, e.g. its recall cut-off. */
+  config?: Partial<AtomicV2Config>;
 }
 
 /** Everything that differs between the Android app and the in-chat preview. */
@@ -30,4 +32,6 @@ export interface Platform {
   exportMemory?(json: string): Promise<void>;
   /** Shown when the mic is tapped on a platform that cannot listen. */
   noMicrophoneText: string;
+  /** Where memory lives, as the UI says it: "on this phone", "in this browser". */
+  where: string;
 }

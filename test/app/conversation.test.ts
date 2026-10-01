@@ -197,6 +197,18 @@ test('the offline fallback embedder is deterministic and matches similar spellin
   assert.ok(Math.abs(Math.hypot(...a) - 1) < 1e-9);
 });
 
+test('with the fallback embedder, a later question recalls the earlier order and skips unrelated talk', async () => {
+  const atomic = await AtomicV2.open({ embedder: new HashEmbedder(), store: new InMemoryStore(), config: HashEmbedder.config });
+  await atomic.process({
+    ask: 'Fill the order sheet for AVI Enterprise and apply a 3 percent discount, ordered by boss',
+    response: 'Done. I filled the order sheet for AVI Enterprise and applied a 3 percent discount.',
+  });
+  await atomic.process({ ask: 'Remind me to call Sharma ji about the nails payment tomorrow', response: 'Okay, I will remind you tomorrow.' });
+  const discount = await atomic.recall('What discount did we give AVI last time?');
+  assert.match(discount.items[0]?.experience.response ?? '', /3 percent/);
+  assert.equal(discount.items.some((item) => /Sharma/.test(item.experience.ask)), false);
+});
+
 test('recall result type used by the conversation is the engine type', async () => {
   const { atomic } = await setup(['x']);
   const result: RecallResult = await atomic.recall('anything');

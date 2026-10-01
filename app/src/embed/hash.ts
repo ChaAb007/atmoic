@@ -1,10 +1,16 @@
-import type { Embedder } from '@atomic-v2';
+import type { AtomicV2Config, Embedder } from '@atomic-v2';
 
 /**
  * Offline fallback embedder: hashed character trigrams and words. It knows spelling, not meaning, so it is only
  * used until the on-device model is available; memory is re-embedded with the model as soon as it loads.
  */
 export class HashEmbedder implements Embedder {
+  /**
+   * Spelling overlap scores lower than meaning does: related messages land around 0.2-0.4 and unrelated ones
+   * below 0.2, where the model's scale puts the cut at 0.35. Recall uses this cut while this embedder runs.
+   */
+  static readonly config: Partial<AtomicV2Config> = { recallMinSimilarity: 0.2 };
+
   readonly id = 'hash-ngram-512-v1';
   private readonly dimensions = 512;
 

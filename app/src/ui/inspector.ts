@@ -46,8 +46,8 @@ export function renderExperience(experience: Experience | undefined): string {
 <h3>Layer 1 · pieces by relevance</h3>${pieces}`;
 }
 
-export function renderRecent(experiences: Experience[], now: Date): string {
-  if (!experiences.length) return '<p class="empty">No memories yet. Everything you talk about is kept here, on this phone.</p>';
+export function renderRecent(experiences: Experience[], now: Date, where = 'on this phone'): string {
+  if (!experiences.length) return `<p class="empty">No memories yet. Everything you talk about is kept here, ${where}.</p>`;
   return experiences.map((experience) => `<div class="memory-item" data-id="${experience.id}">
 <header><span class="kind ${experience.kind}">${experience.kind}</span><span>${escape(describeWhen(experience.at, now))}</span><button data-forget="${experience.id}">Forget</button></header>
 <p>${escape(experience.summary)}</p></div>`).join('');

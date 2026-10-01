@@ -1,5 +1,6 @@
 node_modules/
 app/dist/
+app/dist-preview/
 app/android/app/build/
 app/android/build/
 app/android/.gradle/

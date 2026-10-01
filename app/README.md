@@ -43,6 +43,14 @@ cd android && ./gradlew assembleDebug
 Try it in a browser with `npm run dev` (speech recognition needs Chrome; the memory model needs internet the first
 time).
 
+## In-chat preview
+
+`npm run build:preview` builds the same app as one page for a Claude artifact (`src/preview.ts`, output in
+`dist-preview/artifact/`). There, replies come from the viewer's own Claude account through the artifact's `sample`
+capability (still one prompt per message, no history), memory lives in that browser, Surface speaks but cannot
+listen (artifact frames have no microphone), and memory uses the spelling-based embedder because the on-device
+model cannot be downloaded inside the frame.
+
 ## Notes for the prototype
 
 - Calls go straight from the phone to the Claude API using your key (the SDK's browser mode). Fine for a personal

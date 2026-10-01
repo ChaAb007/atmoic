@@ -31,27 +31,50 @@ export class DeviceFileStore implements MemoryStore {
   }
 }
 
-/** Browser storage for trying the app on a computer (origin-private file system, then localStorage). */
+/**
+ * Browser storage for trying the app on a computer: the origin-private file system, then localStorage. When the
+ * browser blocks both (a private window, a locked-down frame), memory lives only until the page closes.
+ */
 export class BrowserStore implements MemoryStore {
+  private kept: string | undefined;
+
   async load(): Promise<string | undefined> {
+    // An empty file means the browser created it but could not write it (Safari without createWritable).
+    const fromFile = await this.readFile();
+    if (fromFile) return fromFile;
+    try {
+      return localStorage.getItem('atomic.memory-v2') ?? this.kept;
+    } catch {
+      return this.kept;
+    }
+  }
+
+  private async readFile(): Promise<string | undefined> {
     try {
       const root = await navigator.storage.getDirectory();
       const handle = await root.getFileHandle('memory-v2.json');
       return await (await handle.getFile()).text();
     } catch {
-      return localStorage.getItem('atomic.memory-v2') ?? undefined;
+      return undefined;
     }
   }
 
   async save(text: string): Promise<void> {
+    this.kept = text;
     try {
       const root = await navigator.storage.getDirectory();
       const handle = await root.getFileHandle('memory-v2.json', { create: true });
       const writable = await handle.createWritable();
       await writable.write(text);
       await writable.close();
+      return;
     } catch {
+      // fall through to localStorage
+    }
+    try {
       localStorage.setItem('atomic.memory-v2', text);
+    } catch {
+      // kept in memory only
     }
   }
 }

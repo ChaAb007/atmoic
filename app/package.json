@@ -9,7 +9,8 @@
     "build": "tsc --noEmit -p tsconfig.json && vite build",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "preview": "vite preview",
-    "cap:sync": "npm run build && cap sync android"
+    "cap:sync": "npm run build && cap sync android",
+    "build:preview": "tsc --noEmit -p tsconfig.json && node scripts/build-preview.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",
