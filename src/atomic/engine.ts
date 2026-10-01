@@ -387,6 +387,10 @@ export class AtomicEngine {
       const partyId = result.partyId ?? context.partyId;
       const dealId = result.dealId ?? context.dealId;
       const angles: Angles = { ...result.angles, specifics: { ...result.angles.specifics } };
+      // Emotion is read only from people: agent replies, tool output and business events carry none.
+      const fromAgent = context.kind === 'event'
+        || (speaker ? (input.agents ?? []).includes(speaker) : context.kind === 'agent_task' || context.kind === 'agent_agent');
+      if (fromAgent) angles.emotion = 'neutral';
       this.resolveDates(angles.specifics, text, experience.occurredAt);
       if (replyTo && previous) angles.specifics = { ...previous.facts, ...angles.specifics };
       const action = result.action ?? (context.kind === 'event' ? input.event?.type : undefined);

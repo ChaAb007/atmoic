@@ -226,6 +226,8 @@ export interface Input {
   id?: string;
   context: InputContext;
   participants: string[];
+  /** Participants that are agents, not people. Emotion is read only from people. */
+  agents?: string[];
   /** One line per statement, optionally "Speaker: text". */
   raw: string;
   language?: string;

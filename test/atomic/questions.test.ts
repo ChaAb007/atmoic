@@ -214,3 +214,23 @@ test('a short reply that is not an answer to anyone stays a normal statement', a
   assert.equal(result.statements[0].replyTo, undefined);
   assert.equal(result.statements[0].level, 'L3');
 });
+
+test('emotion is read only from people, never from agents, tool output or events', async () => {
+  const { engine } = setup();
+  const chat = await engine.process({
+    context: { kind: 'user_agent', topic: TOPIC, partyId: 'avi', dealId: 'd' },
+    participants: ['Gupta', 'order-agent'], agents: ['order-agent'],
+    raw: 'Gupta: rust wala maal phir bheja 🙄 order cancel karo\norder-agent: order 600 kg wire nails cancel ho gaya, payment refund hoga 😄',
+  });
+  const [human, agent] = chat.statements;
+  assert.notEqual(agent.level, 'L3', 'the agent line is relevant, so emotion was actually considered');
+  const memory = async (id: string) => (await (engine as unknown as { storage: { getMemory(id: string): Promise<{ firedAngles?: string[] }> } }).storage.getMemory(id))!;
+  assert.ok((await memory(human.memoryId)).firedAngles!.includes('emotion'), 'the customer is annoyed');
+  assert.ok(!(await memory(agent.memoryId)).firedAngles!.includes('emotion'), 'the agent has no emotion');
+
+  const task = await engine.process({
+    context: { kind: 'agent_task', topic: TOPIC, partyId: 'avi', dealId: 'SO-1' },
+    participants: ['Amit'], raw: 'SO-1 created for AVI 3 ton wire nails, haha 😄',
+  });
+  assert.ok(!(await memory(task.statements[0].memoryId)).firedAngles!.includes('emotion'), 'unattributed tool output has no emotion');
+});
